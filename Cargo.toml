@@ -1,0 +1,8 @@
+[package]
+name = "git-sign-verifier"
+version = "0.1.0"
+edition = "2024"
+description = "Verify git commits are signed by trusted keys"
+authors = ["Colin Darie <colin@darie.eu>"]
+
+[dependencies]
