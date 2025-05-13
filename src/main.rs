@@ -24,6 +24,13 @@ enum Commands {
         #[arg(long, required = true)]
         tagger_email: String,
     },
+
+    /// Verify the commits since last tags are signed with authenticated signing keys.
+    Verify {
+        /// Path of repository
+        #[arg(short, long, default_value = ".")]
+        directory: String,
+    },
 }
 
 const TAG_NAME: &str = "SIGN_VERIFIED";
@@ -113,6 +120,36 @@ fn read_or_update_local_config(
     })
 }
 
+fn verify_from_ref(
+    repo: &Repository,
+    from_ref: &Reference,
+    to_ref: &Reference,
+) -> Result<(), GitError> {
+    let mut commits = repo.revwalk()?;
+    let from_oid = from_ref.target().unwrap(); // tag oid
+    let from_commit_oid = from_ref.peel_to_commit().unwrap().id(); // commit oid
+    let to_oid = to_ref.target().unwrap(); // commit (HEAD) oid
+
+    let range_str = format!("{}..{}", from_oid, to_oid);
+    commits.push_range(&range_str)?;
+    commits.set_sorting(git2::Sort::REVERSE)?;
+
+    println!(
+        "Verifying commits from {from_ref}={from_oid} to {to_ref}={to_oid}",
+        from_ref = from_ref.shorthand().unwrap(),
+        from_oid = from_commit_oid,
+        to_ref = to_ref.shorthand().unwrap(),
+        to_oid = to_oid,
+    );
+
+    for oid in commits {
+        let commit = repo.find_commit(oid.unwrap())?;
+        println!("Commit {} OK", commit.id());
+    }
+
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -155,6 +192,35 @@ fn main() {
                     Err(e) => eprintln!("Erreur lors de la création du tag: {}", e),
                 },
                 Err(e) => eprintln!("Une erreur est survenue: {}", e),
+            }
+        }
+
+        Commands::Verify { directory } => {
+            let repo = open_repo(directory);
+
+            let from_ref = match check_tag_exists(&repo) {
+                Some(gitref) => gitref,
+                None => {
+                    eprintln!("Tag {} doesn't exist!", TAG_NAME);
+                    std::process::exit(1);
+                }
+            };
+            let to_ref = repo.head().unwrap();
+
+            let local_config = read_or_update_local_config(&repo, None, None).unwrap();
+
+            match verify_from_ref(&repo, &from_ref, &to_ref) {
+                Ok(()) => {
+                    println!("All commits were here.");
+                    let to_commit = to_ref.peel_to_commit().unwrap();
+                    match add_tag(&repo, &to_commit, &local_config) {
+                        Ok(()) => {
+                            println!("Tag {} moved to {}", TAG_NAME, to_commit.id());
+                        }
+                        Err(e) => eprintln!("Error while creating tag: {}", e),
+                    }
+                }
+                Err(e) => eprintln!("Error while verifying commits: {}", e),
             }
         }
     }
