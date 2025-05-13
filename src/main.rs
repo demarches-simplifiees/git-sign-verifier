@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
 use git2::{Commit, Error as GitError, Reference, Repository};
+use gpgme::{Context, Protocol};
+use std::io::{BufRead, Write};
+mod gpg;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -34,6 +37,7 @@ enum Commands {
 }
 
 const TAG_NAME: &str = "SIGN_VERIFIED";
+const EXIT_INVALID_SIGNATURE: i32 = 127;
 
 struct TaggerConfig {
     name: String,
@@ -120,6 +124,54 @@ fn read_or_update_local_config(
     })
 }
 
+// In order to verify a signature, we have to construct the payload signed.
+// It's composed from the commit headers (except the signature) and the commit message as body.
+// Basically we iterate on headers and collect them in a buffer, then we concat the body message.
+// Work with bytes to deal with potential encoding issues.
+fn signed_commit_data(commit: &Commit) -> gpgme::Result<gpgme::Data<'static>> {
+    let raw_header_bytes = commit.raw_header_bytes();
+    let mut filtered_header_bytes = Vec::new();
+
+    let mut cursor = std::io::Cursor::new(raw_header_bytes);
+    let mut line_buf = Vec::new();
+    let mut in_gpgsig_header = false;
+
+    loop {
+        line_buf.clear();
+        match cursor.read_until(b'\n', &mut line_buf) {
+            Ok(0) => break, // End of headers
+            Ok(_) => {
+                if line_buf.starts_with(b"gpgsig ") {
+                    in_gpgsig_header = true;
+                } else if in_gpgsig_header && line_buf.starts_with(b" ") {
+                    // Content of gpgsig header starts with a space (signature itself)
+                } else {
+                    // We left gpgsig header
+                    if in_gpgsig_header {
+                        in_gpgsig_header = false;
+                    }
+
+                    filtered_header_bytes
+                        .write_all(&line_buf)
+                        .unwrap_or_else(|e| {
+                            panic!("Error while writing filtered headers: {}", e);
+                        });
+                }
+            }
+            Err(e) => {
+                panic!("Error while reading commit headers: {}", e);
+            }
+        };
+    }
+
+    let mut payload_to_verify = Vec::new();
+    payload_to_verify.extend_from_slice(&filtered_header_bytes);
+    payload_to_verify.push(b'\n');
+    payload_to_verify.extend_from_slice(commit.message_raw_bytes());
+
+    gpgme::Data::from_bytes(&payload_to_verify)
+}
+
 fn verify_from_ref(
     repo: &Repository,
     from_ref: &Reference,
@@ -142,15 +194,39 @@ fn verify_from_ref(
         to_oid = to_oid,
     );
 
+    // Initialize a GPG verification context
+    let mut gpg_ctx = match Context::from_protocol(Protocol::OpenPgp) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            panic!("Error while initializing GPGME context: {}", e);
+        }
+    };
+
     for oid in commits {
-        let commit = repo.find_commit(oid.unwrap())?;
+        let commit_oid = oid.unwrap();
+        let commit = repo.find_commit(commit_oid)?;
+
         match commit.header_field_bytes("gpgsig") {
-            Ok(_signature_data) => {
-                println!("Commit {} GPG signature found", commit.id());
+            Ok(signature_data) => {
+                let text_to_verify_data = signed_commit_data(&commit).unwrap();
+
+                let verification_result = gpg_ctx
+                    .verify_detached(signature_data.as_str().unwrap(), text_to_verify_data)
+                    .unwrap();
+
+                match gpg::verify_gpg_signature_result(verification_result) {
+                    Ok(()) => {
+                        println!("✅ Commit {} GPG signature is trusted", commit_oid);
+                    }
+                    Err(e) => {
+                        eprintln!("🔴 Commit {} GPG signature is invalid: {}", commit_oid, e);
+                        std::process::exit(EXIT_INVALID_SIGNATURE);
+                    }
+                }
             }
             Err(_) => {
-                eprintln!("Commit {} is not signed!", commit.id());
-                std::process::exit(1);
+                eprintln!("🔴 Commit {} is not signed with GPG", commit_oid);
+                std::process::exit(EXIT_INVALID_SIGNATURE);
             }
         }
     }
@@ -219,7 +295,7 @@ fn main() {
 
             match verify_from_ref(&repo, &from_ref, &to_ref) {
                 Ok(()) => {
-                    println!("All commits were signed.");
+                    println!("🎉 All commits were signed and trusted.");
                     let to_commit = to_ref.peel_to_commit().unwrap();
                     match add_tag(&repo, &to_commit, &local_config) {
                         Ok(()) => {
