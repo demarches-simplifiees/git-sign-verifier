@@ -144,7 +144,15 @@ fn verify_from_ref(
 
     for oid in commits {
         let commit = repo.find_commit(oid.unwrap())?;
-        println!("Commit {} OK", commit.id());
+        match commit.header_field_bytes("gpgsig") {
+            Ok(_signature_data) => {
+                println!("Commit {} GPG signature found", commit.id());
+            }
+            Err(_) => {
+                eprintln!("Commit {} is not signed!", commit.id());
+                std::process::exit(1);
+            }
+        }
     }
 
     Ok(())
@@ -211,7 +219,7 @@ fn main() {
 
             match verify_from_ref(&repo, &from_ref, &to_ref) {
                 Ok(()) => {
-                    println!("All commits were here.");
+                    println!("All commits were signed.");
                     let to_commit = to_ref.peel_to_commit().unwrap();
                     match add_tag(&repo, &to_commit, &local_config) {
                         Ok(()) => {
