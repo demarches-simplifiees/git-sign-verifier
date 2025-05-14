@@ -9,3 +9,7 @@ authors = ["Colin Darie <colin@darie.eu>"]
 clap = { version = "4.5.37", features = ["derive"] }
 git2 = "0.20.2"
 gpgme = "0.11.0"
+
+[lib]
+name = "git_sign_verifier"
+path = "src/lib.rs"
