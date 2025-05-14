@@ -26,6 +26,10 @@ enum Commands {
         /// Email used when setting the git tag. Persisted as local git config 'git-sign-verifier.taggeremail' for future operations.
         #[arg(long, required = true)]
         tagger_email: String,
+
+        /// GPGME home dir, in which trusted public keys are stored (in pubring.kbx file). Default is generally $HOME.
+        #[arg(short, long, required = false)]
+        gpgme_home_dir: String,
     },
 
     /// Verify the commits since last tags are signed with authenticated signing keys.
@@ -39,9 +43,10 @@ enum Commands {
 const TAG_NAME: &str = "SIGN_VERIFIED";
 const EXIT_INVALID_SIGNATURE: i32 = 127;
 
-struct TaggerConfig {
+struct Config {
     name: String,
     email: String,
+    gpgme_home_dir: Option<String>,
 }
 
 fn open_repo(repo_path: String) -> Repository {
@@ -74,11 +79,7 @@ fn print_commit(commit: &Commit) -> () {
     println!("\n  {}", commit.message().unwrap_or("no msg"));
 }
 
-fn add_tag(
-    repo: &Repository,
-    commit: &Commit,
-    tagger_config: &TaggerConfig,
-) -> Result<(), GitError> {
+fn add_tag(repo: &Repository, commit: &Commit, tagger_config: &Config) -> Result<(), GitError> {
     let tagger = git2::Signature::now(&tagger_config.name, &tagger_config.email)?;
 
     repo.tag(
@@ -98,7 +99,8 @@ fn read_or_update_local_config(
     repo: &Repository,
     provided_name: Option<String>,
     provided_email: Option<String>,
-) -> Result<TaggerConfig, GitError> {
+    gpgme_home_dir: Option<String>,
+) -> Result<Config, GitError> {
     let repo_config = repo.config()?;
     let mut local_config = repo_config.open_level(git2::ConfigLevel::Local)?;
 
@@ -118,9 +120,21 @@ fn read_or_update_local_config(
         None => local_config.get_string("git-sign-verifier.taggeremail")?,
     };
 
-    Ok(TaggerConfig {
+    let resolved_gpgme_home_dir = match gpgme_home_dir {
+        Some(dir) => {
+            local_config.set_str("git-sign-verifier.gpgmehomedir", &dir)?;
+            Some(dir)
+        }
+
+        None => local_config
+            .get_string("git-sign-verifier.gpgmehomedir")
+            .ok(),
+    };
+
+    Ok(Config {
         name: resolved_name,
         email: resolved_email,
+        gpgme_home_dir: resolved_gpgme_home_dir,
     })
 }
 
@@ -176,6 +190,7 @@ fn verify_from_ref(
     repo: &Repository,
     from_ref: &Reference,
     to_ref: &Reference,
+    config: &Config,
 ) -> Result<(), GitError> {
     let mut commits = repo.revwalk()?;
     let from_oid = from_ref.target().unwrap(); // tag oid
@@ -248,6 +263,7 @@ fn main() {
             directory,
             tagger_name,
             tagger_email,
+            gpgme_home_dir,
         } => {
             let repo = open_repo(directory);
 
@@ -262,6 +278,7 @@ fn main() {
                 &repo,
                 Some(tagger_name),
                 Some(tagger_email),
+                Some(gpgme_home_dir),
             ) {
                 Ok(config) => config,
                 Err(e) => {
@@ -297,13 +314,13 @@ fn main() {
             };
             let to_ref = repo.head().unwrap();
 
-            let local_config = read_or_update_local_config(&repo, None, None).unwrap();
+            let config = read_or_update_local_config(&repo, None, None, None).unwrap();
 
-            match verify_from_ref(&repo, &from_ref, &to_ref) {
+            match verify_from_ref(&repo, &from_ref, &to_ref, &config) {
                 Ok(()) => {
                     println!("🎉 All commits were signed and trusted.");
                     let to_commit = to_ref.peel_to_commit().unwrap();
-                    match add_tag(&repo, &to_commit, &local_config) {
+                    match add_tag(&repo, &to_commit, &config) {
                         Ok(()) => {
                             println!("Tag {} moved to {}", TAG_NAME, to_commit.id());
                         }
