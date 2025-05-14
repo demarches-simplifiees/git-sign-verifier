@@ -202,6 +202,12 @@ fn verify_from_ref(
         }
     };
 
+    if let Some(home_dir) = config.gpgme_home_dir.as_ref() {
+        if let Err(e) = gpg_ctx.set_engine_home_dir(home_dir.as_str()) {
+            panic!("Error setting GPGME home directory: {}", e);
+        }
+    }
+
     for oid in commits {
         let commit_oid = oid.unwrap();
         let commit = repo.find_commit(commit_oid)?;
