@@ -32,9 +32,9 @@ enum Commands {
         #[arg(long, required = true)]
         tagger_email: String,
 
-        /// GPGME home dir, in which trusted public keys are stored (in pubring.kbx file). Default is generally $HOME.
+        /// GnuPG home dir (relative path to workdir), in which trusted public keys are stored (in pubring.kbx file).
         #[arg(short, long, required = false)]
-        gpgme_home_dir: String,
+        gpgme_home_dir: Option<String>,
     },
 
     /// Verify the commits since last tags are signed with authenticated signing keys.

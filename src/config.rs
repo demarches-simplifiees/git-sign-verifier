@@ -34,20 +34,43 @@ pub fn read_or_update_local_config(
         None => local_config.get_string("git-sign-verifier.taggeremail")?,
     };
 
-    let resolved_gpgme_home_dir = match gpgme_home_dir {
-        Some(dir) => {
-            local_config.set_str("git-sign-verifier.gpgmehomedir", &dir)?;
-            Some(dir)
-        }
-
-        None => local_config
-            .get_string("git-sign-verifier.gpgmehomedir")
-            .ok(),
-    };
+    let resolved_gpgme_home_dir = resolve_gpgme_home_dir(&mut local_config, gpgme_home_dir, repo);
 
     Ok(Config {
         name: resolved_name,
         email: resolved_email,
         gpgme_home_dir: resolved_gpgme_home_dir,
     })
+}
+
+// gpgme_home_dir is provided as relative path for portability
+// but need to work as an absolute path.
+fn resolve_gpgme_home_dir(
+    local_config: &mut git2::Config,
+    gpgme_home_dir: Option<String>,
+    repo: &Repository,
+) -> Option<String> {
+    match gpgme_home_dir {
+        Some(dir) => {
+            local_config
+                .set_str("git-sign-verifier.gpgmehomedir", &dir)
+                .unwrap();
+            abs_path(&repo, &dir)
+        }
+        None => match local_config.get_string("git-sign-verifier.gpgmehomedir") {
+            Ok(dir) => abs_path(&repo, &dir),
+            Err(_) => None, // default home will be used
+        },
+    }
+}
+
+fn abs_path(repo: &Repository, dir: &str) -> Option<String> {
+    let abs_path = repo
+        .workdir()
+        .unwrap()
+        .join(dir)
+        .to_str()
+        .unwrap()
+        .to_string();
+    Some(abs_path)
 }
