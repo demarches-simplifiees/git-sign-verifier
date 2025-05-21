@@ -24,14 +24,6 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         directory: String,
 
-        /// Name used when setting the git tag. Persisted as local git config 'git-sign-verifier.taggername' for future operations.
-        #[arg(long, default_value = "Git Sign Verifier")]
-        tagger_name: String,
-
-        /// Email used when setting the git tag. Persisted as local git config 'git-sign-verifier.taggeremail' for future operations.
-        #[arg(long, required = true)]
-        tagger_email: String,
-
         /// GnuPG home dir (relative path to workdir), in which trusted public keys are stored (in pubring.kbx file).
         #[arg(short, long, required = false)]
         gpgme_home_dir: Option<String>,
@@ -51,10 +43,8 @@ fn main() {
     match cli.command {
         Commands::Init {
             directory,
-            tagger_name,
-            tagger_email,
             gpgme_home_dir,
-        } => match init_command(&directory, tagger_name, tagger_email, gpgme_home_dir) {
+        } => match init_command(&directory, gpgme_home_dir) {
             Ok(_) => (),
             Err(e) => {
                 eprintln!("Erreur lors de l'initialisation: {}", e);

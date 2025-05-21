@@ -19,14 +19,14 @@ pub fn verify_command(repo_path: &str) -> Result<bool, GitError> {
     };
     let to_ref = repo.head()?;
 
-    let config = read_or_update_local_config(&repo, None, None, None)?;
+    let config = read_or_update_local_config(&repo, None)?;
 
     let all_valid = verify_from_ref(&repo, &from_ref, &to_ref, &config)?;
 
     if all_valid {
         println!("🎉 All commits were signed and trusted.");
         let to_commit = to_ref.peel_to_commit()?;
-        add_tag(&repo, &to_commit, &config)?;
+        add_tag(&repo, &to_commit)?;
         println!("Tag {} moved to {}", TAG_NAME, to_commit.id());
     }
 

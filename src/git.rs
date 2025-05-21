@@ -1,4 +1,4 @@
-use crate::config::{Config, TAG_NAME};
+use crate::config::TAG_NAME;
 use git2::{Commit, Error as GitError, Reference, Repository};
 
 // Open a git repository
@@ -35,8 +35,9 @@ pub fn print_commit(commit: &Commit) -> () {
 }
 
 // Add a tag on a commit using a tagger config
-pub fn add_tag(repo: &Repository, commit: &Commit, tagger_config: &Config) -> Result<(), GitError> {
-    let tagger = git2::Signature::now(&tagger_config.name, &tagger_config.email)?;
+pub fn add_tag(repo: &Repository, commit: &Commit) -> Result<(), GitError> {
+    let user = read_user(repo)?;
+    let tagger = git2::Signature::now(&user.name, &user.email)?;
 
     repo.tag(
         TAG_NAME,
@@ -47,4 +48,19 @@ pub fn add_tag(repo: &Repository, commit: &Commit, tagger_config: &Config) -> Re
     )?;
 
     Ok(())
+}
+
+struct GitUser {
+    name: String,
+    email: String,
+}
+
+fn read_user(repo: &Repository) -> Result<GitUser, GitError> {
+    let repo_config = repo.config()?;
+    let config = repo_config.open_level(git2::ConfigLevel::Local)?;
+
+    let name = config.get_string("user.name")?;
+    let email = config.get_string("user.email")?;
+
+    Ok(GitUser { name, email })
 }
