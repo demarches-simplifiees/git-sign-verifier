@@ -16,15 +16,15 @@ impl TestFixture {
     // Initialize a test with a specific branch from the test repository.
     // We copy the repository and gpg home to a temporary directory
     // so we can modify the repository without affecting the original and maintain tests concurrency.
-    fn with_branch(branch: &str) -> Self {
+    fn with_branch(repo_name: &str, branch: &str) -> Self {
         let base_path = Path::new(env!("CARGO_MANIFEST_DIR"));
         let fixtures_dir = base_path.join("tests").join("fixtures");
-        let tar_archive = fixtures_dir.join("repo-test.tar");
+        let tar_archive = fixtures_dir.join(format!("{}.tar", repo_name));
         let gpg_home = fixtures_dir.join("gpg");
 
         // Create unique temporary directory for this test
         let temp_dir = std::env::temp_dir().join(format!("git-sign-verifier-test-{}", branch));
-        let repo_path = temp_dir.join("repo-test");
+        let repo_path = temp_dir.join(repo_name);
 
         println!("Run test in {}", repo_path.to_str().unwrap());
 
@@ -68,7 +68,7 @@ mod tests {
     // All commits are signed with trusted key
     #[test]
     fn test_all_commits_signed_trusted() {
-        let fixture = TestFixture::with_branch("all-signed");
+        let fixture = TestFixture::with_branch("repo-test", "all-signed");
 
         // Verify commits
         let result = fixture.verify().expect("Verification failed");
@@ -80,7 +80,7 @@ mod tests {
     // Detection of unsigned commit
     #[test]
     fn test_detect_unsigned_commit() {
-        let fixture = TestFixture::with_branch("unsigned");
+        let fixture = TestFixture::with_branch("repo-test", "unsigned");
 
         // Verify commits - should return false
         let result = fixture.verify().expect("Verification process failed");
@@ -92,7 +92,7 @@ mod tests {
     // Detection of commit signed with untrusted key
     #[test]
     fn test_detect_untrusted_key() {
-        let fixture = TestFixture::with_branch("untrusted-gpg");
+        let fixture = TestFixture::with_branch("repo-test", "untrusted-gpg");
 
         // Verify commits - should return false
         let result = fixture.verify().expect("Verification process failed");
