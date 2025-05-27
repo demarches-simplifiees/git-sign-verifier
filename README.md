@@ -12,13 +12,38 @@ A reference tag marks the commit from which the verification process begins; thi
 
 Initializes the repository for commit signature verification. This action sets up a reference tag, named `SIGN_VERIFIED`, pointing to the latest commit on the `main` branch. This tag serves as the starting point for future verification runs.
 
+If you want to use a specific gpg keyring for verifications, you can specify it with the `--gpgme-home-dir` option.
+
 **Usage:**
 
 ```bash
 git-sign-verifier init # default to current directory
 git-sign-verifier init --directory /path/to/your/repo
+git-sign-verifier init --gpgme-home-dir /path/to/authorized/gpg/keyring # default to ~/.gnupg
 ```
 
+### `verify`
+
+Verifies the commits since the latest commit on the `SIGN_VERIFIED` tag. This action will fail if any commit is not signed with an authorized key.
+
+Currently, only GPG keys are supported. The authorized keys are read either from the default GPG keyring of the user running the program or from a keyring specified in `init` command. Keys must be trusted, and must not have expired or been revoked.
+
+
+**Usage:**
+
+```bash
+git-sign-verifier verify
+git-sign-verifier verify --directory /path/to/your/repo
+```
+
+### Merge commits
+
+A merge commit is considered verified when :
+- merge commit itself comes from an authorized key, i.e. when using github, their pubkey must be authorized. This helps to prevent evil merges with from untrusted contributors.
+- all parents commits are signed by an authorized key.
+- all recursive parents are verified until the last SIGN_VERIFIED tag.
+
+To accept external contributions, you have to signoff any commit with an authorized key.
 
 ## Tests
 
