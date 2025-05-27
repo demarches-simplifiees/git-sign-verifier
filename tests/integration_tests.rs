@@ -22,8 +22,16 @@ impl TestFixture {
         let tar_archive = fixtures_dir.join(format!("{}.tar", repo_name));
         let gpg_home = fixtures_dir.join("gpg");
 
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
         // Create unique temporary directory for this test
-        let temp_dir = std::env::temp_dir().join(format!("git-sign-verifier-test-{}", branch));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "git-sign-verifier-{}-{}-{}",
+            repo_name, branch, timestamp
+        ));
         let repo_path = temp_dir.join(repo_name);
 
         println!("Run test in {}", repo_path.to_str().unwrap());
@@ -38,11 +46,19 @@ impl TestFixture {
         copy_directory(&gpg_home, &temp_dir.join("gpg")).expect("Failed to copy gpg_home");
 
         // Checkout the specified branch
-        Command::new("git")
+        let output = Command::new("git")
             .current_dir(&repo_path)
             .args(&["checkout", branch])
             .output()
             .expect("Failed to checkout branch");
+
+        if !output.status.success() {
+            panic!(
+                "Failed to checkout branch '{}': {}",
+                branch,
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
 
         TestFixture {
             repo_path,
