@@ -1,3 +1,4 @@
 /target
 /tmp
 /tests/fixtures/repo-test
+/tests/fixtures/repo-untagged

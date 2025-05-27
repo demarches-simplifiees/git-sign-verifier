@@ -1,4 +1,4 @@
-use git_sign_verifier::verify_command;
+use git_sign_verifier::{init_command, verify_command};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -66,6 +66,11 @@ impl TestFixture {
         }
     }
 
+    // Initialize repo
+    fn init(&self, gpgdir: Option<String>) -> Result<(), git2::Error> {
+        init_command(self.repo_path.to_str().unwrap(), gpgdir)
+    }
+
     // Verify commits
     fn verify(&self) -> Result<bool, git2::Error> {
         verify_command(self.repo_path.to_str().unwrap())
@@ -115,6 +120,46 @@ mod tests {
         assert!(
             !result,
             "Verification should fail due to untrusted signature"
+        );
+
+        fixture.cleanup();
+    }
+
+    // Init command set the tag
+    #[test]
+    fn test_init_create_tag() {
+        let fixture = TestFixture::with_branch("repo-untagged", "main");
+        fixture.init(None).expect("Initialization process failed");
+
+        let repo = git2::Repository::open(&fixture.repo_path).expect("Failed to open repo");
+        let result = repo.find_reference("refs/tags/SIGN_VERIFIED");
+
+        assert!(result.is_ok(), "Tag should have been created");
+
+        fixture.cleanup();
+    }
+
+    // Init command set gpg config
+    #[test]
+    fn test_init_define_gpg_config() {
+        let fixture = TestFixture::with_branch("repo-untagged", "main");
+        fixture
+            .init(Some("gpgdir".to_string()))
+            .expect("Initialization process failed");
+
+        let repo = git2::Repository::open(&fixture.repo_path).expect("Failed to open repo");
+        let repo_config = repo.config().expect("Failed to read config");
+        let config = repo_config
+            .open_level(git2::ConfigLevel::Local)
+            .expect("Failed to open config");
+
+        let config_dir = config
+            .get_string("git-sign-verifier.gpgmehomedir")
+            .expect("Invalid gpg config");
+
+        assert_eq!(
+            config_dir, "gpgdir",
+            "Git config `git-sign-verifier.gpgmehomedir` does not match"
         );
 
         fixture.cleanup();
