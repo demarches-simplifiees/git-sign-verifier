@@ -17,3 +17,18 @@ Initializes the repository for commit signature verification. This action sets u
 ```bash
 git-sign-verifier init # default to current directory
 git-sign-verifier init --directory /path/to/your/repo
+```
+
+
+## Tests
+
+Run tests with `cargo test`.
+
+Minimal static git repositories are used for testing. At test time they are extracted from a `tar` archive into a temporary directory so that they can be modified without affecting the original repository.
+
+If you need to update the test repositories, uncompress the `tar`, update it and re-tar the repository::
+
+```bash
+tar -cf tests/fixtures/repo-untagged.tar -C tests/fixtures repo-untagged
+tar -cf tests/fixtures/repo-test.tar -C tests/fixtures repo-test
+```
