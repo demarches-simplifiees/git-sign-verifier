@@ -95,6 +95,7 @@ fn verify_from_ref(
 
     let range_str = format!("{}..{}", from_oid, to_oid);
     commits.push_range(&range_str)?;
+    commits.set_sorting(git2::Sort::TOPOLOGICAL)?;
     commits.set_sorting(git2::Sort::REVERSE)?;
 
     println!(
