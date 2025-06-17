@@ -6,6 +6,25 @@ This program verifies that commits in a git repository have been signed authoriz
 
 A reference tag marks the commit from which the verification process begins; this is either the initial commit for verification or the last successfully verified commit. A verification involves checking that every commit since this tag is signed with an authorized key.
 
+
+## Prequisites
+
+### Git user config
+
+The reference tag is signed with the user local config of the repo. This means that before initialization, the repo copy which is used for verification must be configured with a valid user name and email :
+
+```sh
+git config --local user.name "John Doe"
+git config --local user.email "john.doe@example.com"
+```
+
+### GPG keyring
+
+The authorized keys are read from the default GPG keyring of the user running the program. Import trusted keys into this keyring with a minimum trust level of `3 (marginal)`.
+
+If you want to use a specific gpg keyring for verifications, you can specify it with the `--gpgme-home-dir` option below.
+
+
 ## Actions
 
 ### `init`
