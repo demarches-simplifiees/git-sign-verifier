@@ -1,5 +1,5 @@
 use crate::config::{Config, TAG_NAME, read_or_update_local_config};
-use crate::git::{add_tag, check_tag_exists, open_repo};
+use crate::git::{add_tag, check_tag_exists, open_repo, print_commit};
 use crate::gpg::verify_gpg_signature_result;
 use git2::{Commit, Error as GitError, Reference, Repository};
 use gpgme::{Context, Protocol};
@@ -138,6 +138,7 @@ fn verify_from_ref(
                     }
                     Err(e) => {
                         eprintln!("🔴 Commit {} GPG signature is invalid: {}", commit_oid, e);
+                        print_commit(&commit);
                         return Ok(false);
                     }
                 }
