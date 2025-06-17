@@ -125,6 +125,32 @@ mod tests {
         fixture.cleanup();
     }
 
+    // Detection of merge commit signed, but parent untrusted
+    #[test]
+    fn test_detect_unsigned_parent_in_merge_commit() {
+        let fixture = TestFixture::with_branch("repo-test", "merge-untrusted");
+
+        // Verify commits - should return false
+        let result = fixture.verify().expect("Verification process failed");
+        assert!(
+            !result,
+            "Verification should fail due to unsigned parent commit in merge"
+        );
+
+        fixture.cleanup();
+    }
+
+    // Detection of merge commit signed as well parents
+    #[test]
+    fn test_verify_trusted_merge_commits() {
+        let fixture = TestFixture::with_branch("repo-test", "merge-trusted");
+
+        let result = fixture.verify().expect("Verification failed");
+        assert!(result, "All commits should be valid");
+
+        fixture.cleanup();
+    }
+
     // Init command set the tag
     #[test]
     fn test_init_create_tag() {
