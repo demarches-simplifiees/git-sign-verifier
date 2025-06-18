@@ -70,9 +70,26 @@ Run tests with `cargo test`.
 
 Minimal static git repositories are used for testing. At test time they are extracted from a `tar` archive into a temporary directory so that they can be modified without affecting the original repository.
 
-If you need to update the test repositories, uncompress the `tar`, update it and re-tar the repository::
+If you need to update the test repositories, uncompress the `tar`, update it and re-tar the repository with `scripts/compress_tests_repos`.
+
+## Import GPG keys
+
+### For a GitHub user
+
+Import non-expired GPG keys of a GitHub user and sign them locally.
 
 ```bash
-tar -cf tests/fixtures/repo-untagged.tar -C tests/fixtures repo-untagged
-tar -cf tests/fixtures/repo-test.tar -C tests/fixtures repo-test
+./scripts/import_gh_user_key <github-username>
 ```
+
+###  For a list of GitHub users
+
+Import GPG keys for a list of GitHub users.
+
+List the GitHub usernames to import in an `import_gh_users.txt` file (one username per line)
+
+```bash
+./scripts/import_gh_list_users
+```
+
+The public key of GitHub used for merge commits will also be imported.

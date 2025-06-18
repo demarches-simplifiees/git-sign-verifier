@@ -2,3 +2,5 @@
 /tmp
 /tests/fixtures/repo-test
 /tests/fixtures/repo-untagged
+
+/import_gh_users.txt

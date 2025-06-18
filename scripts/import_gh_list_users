@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Récupère les clés GPG des contributeurs de DS
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+fixed_usernames=(
+  web-flow # github pub key
+)
+
+# Fichier texte optionnel contenant des usernames supplémentaires (ignoré du dépôt)
+extra_users_file="import_gh_users.txt"
+
+usernames=("${fixed_usernames[@]}")
+
+if [ -f "$extra_users_file" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    usernames+=("$line")
+  done < "$extra_users_file"
+fi
+
+for username in "${usernames[@]}"; do
+  echo "Importation des clés de $username"
+  "$SCRIPT_DIR/import_gh_user_key" "$username" > /dev/null 2>&1
+done
+
+echo "Liste des clés du trousseau:"
+gpg --list-keys
