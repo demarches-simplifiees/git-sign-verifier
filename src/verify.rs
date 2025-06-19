@@ -126,21 +126,45 @@ fn verify_from_ref(
 
         match commit.header_field_bytes("gpgsig") {
             Ok(signature_data) => {
-                let text_to_verify_data = signed_commit_data(&commit).unwrap();
+                let signature_str = signature_data.as_str().unwrap_or("");
+                let signature_begin = signature_str.lines().next().unwrap_or("");
 
-                let verification_result = gpg_ctx
-                    .verify_detached(signature_data.as_str().unwrap(), text_to_verify_data)
-                    .unwrap();
+                if signature_begin == "-----BEGIN PGP SIGNATURE-----" {
+                    let text_to_verify_data = signed_commit_data(&commit).unwrap();
 
-                match verify_gpg_signature_result(verification_result) {
-                    Ok(()) => {
-                        println!("✅ Commit {} GPG signature is trusted", commit_oid);
+                    match gpg_ctx.verify_detached(signature_str, text_to_verify_data) {
+                        Ok(verification_result) => {
+                            match verify_gpg_signature_result(verification_result) {
+                                Ok(()) => {
+                                    println!("✅ Commit {} GPG signature is trusted", commit_oid);
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "🔴 Commit {} GPG signature is invalid: {}",
+                                        commit_oid, e
+                                    );
+                                    print_commit(&commit);
+                                    return Ok(false);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "⚠️ Eroror in GPG signature verification for commit {}. Error: {}",
+                                commit_oid, e
+                            );
+                            return Ok(false);
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("🔴 Commit {} GPG signature is invalid: {}", commit_oid, e);
-                        print_commit(&commit);
-                        return Ok(false);
-                    }
+                } else if signature_begin == "-----BEGIN SSH SIGNATURE-----" {
+                    eprintln!("⚠️ Unsupported SSH signature on commit {}", commit_oid);
+                    return Ok(false);
+                } else {
+                    eprintln!(
+                        "⚠️ Unknown signature type on commit {}: (first line is `{}`)",
+                        commit_oid, signature_begin
+                    );
+                    return Ok(false);
                 }
             }
             Err(_) => {

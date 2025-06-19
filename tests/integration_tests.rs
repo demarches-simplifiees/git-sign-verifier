@@ -151,6 +151,20 @@ mod tests {
         fixture.cleanup();
     }
 
+    // Detection of commit signed with SSH does not panic
+    #[test]
+    fn test_verify_ssh_signature_unsupported() {
+        let fixture = TestFixture::with_branch("repo-test", "signed-ssh");
+
+        let result = fixture.verify().expect("Verification failed");
+        assert!(
+            !result,
+            "Commit with SSH signature should fail because it's not suppoted"
+        );
+
+        fixture.cleanup();
+    }
+
     // Init command set the tag
     #[test]
     fn test_init_create_tag() {
