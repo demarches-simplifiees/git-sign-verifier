@@ -1,4 +1,23 @@
-use gpgme::{SignatureSummary, Validity, VerificationResult};
+use crate::config::Config;
+use gpgme::{Context, Protocol, SignatureSummary, Validity, VerificationResult};
+
+// Initialize a GPG verification context
+pub fn create_gpg_context(config: &Config) -> gpgme::Context {
+    let mut gpg_ctx = match Context::from_protocol(Protocol::OpenPgp) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            panic!("Error while initializing GPGME context: {}", e);
+        }
+    };
+
+    if let Some(home_dir) = config.gpgme_home_dir.as_ref() {
+        if let Err(e) = gpg_ctx.set_engine_home_dir(home_dir.as_str()) {
+            panic!("Error setting GPGME home directory: {}", e);
+        }
+    }
+
+    gpg_ctx
+}
 
 // Verify a message has been signed by a trusted signature.
 // A single valid and trusted signature is enough

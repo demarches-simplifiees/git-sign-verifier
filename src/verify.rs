@@ -1,12 +1,15 @@
-use crate::config::{Config, TAG_NAME, read_or_update_local_config};
+use crate::config::{TAG_NAME, read_or_update_local_config};
 use crate::git::{add_tag, check_tag_exists, open_repo, print_commit};
-use crate::gpg::verify_gpg_signature_result;
+use crate::gpg::{create_gpg_context, verify_gpg_signature_result};
 use git2::{Commit, Error as GitError, Oid, Reference, Repository};
-use gpgme::{Context, Protocol};
+use gpgme::Context;
 use std::io::{BufRead, Write};
 
 pub fn verify_command(repo_path: &str) -> Result<bool, GitError> {
     let repo = open_repo(repo_path);
+    let config = read_or_update_local_config(&repo, None)?;
+
+    let mut gpg_ctx = create_gpg_context(&config);
 
     let from_ref = match check_tag_exists(&repo) {
         Some(gitref) => gitref,
@@ -19,9 +22,7 @@ pub fn verify_command(repo_path: &str) -> Result<bool, GitError> {
     };
     let to_ref = repo.head()?;
 
-    let config = read_or_update_local_config(&repo, None)?;
-
-    let all_valid = verify_from_ref(&repo, &from_ref, &to_ref, &config)?;
+    let all_valid = verify_from_ref(&repo, &from_ref, &to_ref, &mut gpg_ctx)?;
 
     if all_valid {
         println!("🎉 All commits were signed and trusted.");
@@ -86,7 +87,7 @@ fn verify_from_ref(
     repo: &Repository,
     from_ref: &Reference,
     to_ref: &Reference,
-    config: &Config,
+    gpg_ctx: &mut Context,
 ) -> Result<bool, GitError> {
     let mut commits = repo.revwalk()?;
     let from_oid = from_ref.target().unwrap(); // tag oid
@@ -106,24 +107,10 @@ fn verify_from_ref(
         to_oid = to_oid,
     );
 
-    // Initialize a GPG verification context
-    let mut gpg_ctx = match Context::from_protocol(Protocol::OpenPgp) {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            panic!("Error while initializing GPGME context: {}", e);
-        }
-    };
-
-    if let Some(home_dir) = config.gpgme_home_dir.as_ref() {
-        if let Err(e) = gpg_ctx.set_engine_home_dir(home_dir.as_str()) {
-            panic!("Error setting GPGME home directory: {}", e);
-        }
-    }
-
     for oid in commits {
         let commit_oid = oid.unwrap();
 
-        match verify_commit(&repo, &mut gpg_ctx, commit_oid) {
+        match verify_commit(&repo, gpg_ctx, commit_oid) {
             Ok(true) => continue,
             Ok(false) => return Ok(false),
             Err(_) => {
