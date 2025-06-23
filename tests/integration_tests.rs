@@ -159,7 +159,21 @@ mod tests {
         let result = fixture.verify().expect("Verification failed");
         assert!(
             !result,
-            "Commit with SSH signature should fail because it's not suppoted"
+            "Commit with SSH signature should fail because it's not supported"
+        );
+
+        fixture.cleanup();
+    }
+
+    // Fails on tag having an unknown signature
+    #[test]
+    fn test_verify_fails_on_tag_with_unknown_signature() {
+        let fixture = TestFixture::with_branch("repo-tag-unknown-signature", "main");
+
+        let result = fixture.verify().expect("Verification failed");
+        assert!(
+            !result,
+            "Verification tag should fail because it's not signed with a known signature"
         );
 
         fixture.cleanup();

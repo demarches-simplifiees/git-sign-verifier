@@ -1,7 +1,7 @@
 use crate::config::{TAG_NAME, read_or_update_local_config};
 use crate::git::{add_tag, check_tag_exists, open_repo, print_commit};
 use crate::gpg::{create_gpg_context, verify_gpg_signature_result};
-use git2::{Commit, Error as GitError, Oid, Reference, Repository};
+use git2::{Commit, Error as GitError, ObjectType, Oid, Reference, Repository};
 use gpgme::Context;
 use std::io::{BufRead, Write};
 
@@ -12,7 +12,14 @@ pub fn verify_command(repo_path: &str) -> Result<bool, GitError> {
     let mut gpg_ctx = create_gpg_context(&config);
 
     let from_ref = match check_tag_exists(&repo) {
-        Some(gitref) => gitref,
+        Some(gitref) => {
+            let oid = gitref.target().unwrap();
+            match verify_tag(&repo, &mut gpg_ctx, oid) {
+                Ok(true) => gitref,
+                Ok(false) => return Ok(false),
+                Err(e) => return Err(e),
+            }
+        }
         None => {
             return Err(GitError::from_str(&format!(
                 "Tag {} doesn't exist!",
@@ -151,6 +158,64 @@ fn verify_commit(
             }
         }
         Err(e) => Err(e),
+    }
+}
+
+fn verify_tag(repo: &Repository, gpg_ctx: &mut Context, oid: Oid) -> Result<bool, GitError> {
+    let object = repo.find_object(oid, None)?;
+
+    match object.kind() {
+        Some(ObjectType::Tag) => {
+            let tag = object.as_tag().unwrap();
+
+            // Get raw tag data from Object Database
+            let odb = repo.odb()?;
+            let odb_object = odb.read(oid)?;
+            let raw_tag_data = odb_object.data();
+
+            // Tag data is structured like this:
+            // object 054b5abcdef
+            // type commit
+            // tag SIGN_VERIFIED
+            // tagger Test User <test@example.com> 1750782139 +0200
+            //
+            // The message text
+            // -----BEGIN PGP SIGNATURE-----
+            // iQIzBAABCAAdFiEE3MxljV1HemvIj+0nT7hl/bykvMQFAl6+8/0ACgkQT7hl/byk
+            // =kw8E
+            // -----END PGP SIGNATURE-----
+
+            // Convert raw data to string to find signature
+            let raw_tag_str = std::str::from_utf8(raw_tag_data)
+                .map_err(|e| GitError::from_str(&format!("Invalid UTF-8 in tag: {}", e)))?;
+
+            if let Some(sig_start_pos) = raw_tag_str.find("-----BEGIN") {
+                // Split at signature start
+                let (tag_content, signature_data) = raw_tag_str.split_at(sig_start_pos);
+
+                let text_to_verify_data = gpgme::Data::from_bytes(tag_content.as_bytes()).unwrap();
+
+                verify_detached_signature(
+                    signature_data,
+                    text_to_verify_data,
+                    gpg_ctx,
+                    &oid.to_string(),
+                )
+            } else {
+                eprintln!(
+                    "🔴 Signature not found in annotated tag. {}",
+                    tag.message().unwrap_or("")
+                );
+                Ok(false)
+            }
+        }
+        _ => {
+            eprintln!(
+                "🔴 Lightweight tag or tag not signed: impossible to verify its authenticity. {}",
+                oid
+            );
+            Ok(false)
+        }
     }
 }
 

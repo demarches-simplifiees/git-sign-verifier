@@ -2,5 +2,6 @@
 /tmp
 /tests/fixtures/repo-test
 /tests/fixtures/repo-untagged
+/tests/fixtures/repo-tag-unknown-signature
 
 /import_gh_users.txt

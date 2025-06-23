@@ -3,3 +3,4 @@
 # Re-tar fixtures test repos after modifications.
 tar -cf tests/fixtures/repo-test.tar -C tests/fixtures repo-test
 tar -cf tests/fixtures/repo-untagged.tar -C tests/fixtures repo-untagged
+tar -cf tests/fixtures/repo-tag-unknown-signature.tar -C tests/fixtures repo-tag-unknown-signature
