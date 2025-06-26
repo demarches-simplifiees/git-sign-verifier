@@ -208,9 +208,33 @@ mod tests {
             .expect("Initialization process failed");
 
         let repo = git2::Repository::open(&fixture.repo_path).expect("Failed to open repo");
-        let result = repo.find_reference("refs/tags/SIGN_VERIFIED");
+        let reference = repo
+            .find_reference("refs/tags/SIGN_VERIFIED")
+            .expect("Tag should have been created");
 
-        assert!(result.is_ok(), "Tag should have been created");
+        let tag = reference
+            .peel_to_tag()
+            .expect("Failed to peel to tag object");
+        let tag_message = tag.message().unwrap_or("");
+        assert!(
+            tag_message.contains("-----BEGIN PGP SIGNATURE-----"),
+            "Tag message should contain a PGP signature"
+        );
+
+        // Verify the tag signature is valid with git
+        let output = std::process::Command::new("git")
+            .args(&["tag", "-v", "SIGN_VERIFIED"])
+            .current_dir(&fixture.repo_path)
+            .env("GNUPGHOME", &fixture.gpg_home)
+            .output()
+            .expect("Failed to execute git tag -v");
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "git tag -v should succeed. stderr: {}",
+            stderr
+        );
 
         fixture.cleanup();
     }

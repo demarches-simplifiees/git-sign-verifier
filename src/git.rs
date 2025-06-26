@@ -1,5 +1,7 @@
-use crate::config::TAG_NAME;
+use crate::config::{TAG_NAME, read_or_update_local_config};
+use crate::gpg::create_gpg_context;
 use git2::{Commit, Error as GitError, Reference, Repository};
+use std::io::{Read, Seek};
 
 // Open a git repository
 pub fn open_repo(repo_path: &str) -> Repository {
@@ -37,14 +39,51 @@ pub fn print_commit(commit: &Commit) -> () {
 // Add a tag on a commit using a tagger config
 pub fn add_tag(repo: &Repository, commit: &Commit) -> Result<(), GitError> {
     let user = read_user(repo)?;
+
     let tagger = git2::Signature::now(&user.name, &user.email)?;
 
-    repo.tag(
+    // Get GPG configuration and context for signing
+    let config = read_or_update_local_config(repo, None)?;
+    let mut gpg_ctx = create_gpg_context(&config);
+
+    let base_message = "Verification tag managed by git-sign-verifier";
+
+    // Create the tag content that Git expects for signing
+    // // TIP: git cat-file -p SIGNED_TAG outputs a raw tag content with signature
+    let tag_content = format!(
+        "object {}\ntype commit\ntag {}\ntagger {} <{}> {} {:+05}\n\n{}\n",
+        commit.id(),
         TAG_NAME,
-        commit.as_object(),
-        &tagger,
-        "Verification tag managed by git-sign-verifier",
+        tagger.name().unwrap_or(""),
+        tagger.email().unwrap_or(""),
+        tagger.when().seconds(),
+        tagger.when().offset_minutes() * 100 / 60, // format is +0200
+        base_message
+    );
+
+    // Sign the tag content
+    let signature = match sign_tag_content(&mut gpg_ctx, &tag_content) {
+        Ok(sig) => sig,
+        Err(e) => {
+            eprintln!("⚠️ Failed to sign tag content: {}", e);
+            return Err(GitError::from_str("Failed to sign tag"));
+        }
+    };
+
+    let signed_tag_content = format!("{}{}", tag_content, signature);
+
+    // Create the tag object directly in the Git object database
+    // because git2 does not support adding a signed tag with repo.tag()
+    let tag_oid = repo
+        .odb()?
+        .write(git2::ObjectType::Tag, signed_tag_content.as_bytes())?;
+
+    // Create the reference to the tag
+    repo.reference(
+        &format!("refs/tags/{}", TAG_NAME),
+        tag_oid,
         true, // overwrite
+        &format!("{} on {}", base_message, commit.id()),
     )?;
 
     Ok(())
@@ -63,4 +102,24 @@ fn read_user(repo: &Repository) -> Result<GitUser, GitError> {
     let email = config.get_string("user.email")?;
 
     Ok(GitUser { name, email })
+}
+
+// Sign tag content with GPG
+fn sign_tag_content(gpg_ctx: &mut gpgme::Context, content: &str) -> Result<String, gpgme::Error> {
+    // Create data for signing
+    let content_data = gpgme::Data::from_bytes(content.as_bytes())?;
+    let mut signature_data = gpgme::Data::new()?;
+
+    // Create detached signature
+    gpg_ctx.set_armor(true);
+    gpg_ctx.sign_detached(content_data, &mut signature_data)?;
+
+    // Read the signature
+    signature_data.seek(std::io::SeekFrom::Start(0))?;
+    let mut signature_buffer = Vec::new();
+    signature_data.read_to_end(&mut signature_buffer)?;
+    let signature_str =
+        String::from_utf8(signature_buffer).expect("GPG signature should be valid UTF-8");
+
+    Ok(signature_str)
 }
