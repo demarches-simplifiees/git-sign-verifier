@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 mod helpers;
-use helpers::{copy_directory, extract_tar_archive};
+use helpers::{copy_directory, extract_tar_archive, kill_gpg_agent};
 
 // Test fixture managing a temporary copy of the git repository
 struct TestFixture {
     repo_path: PathBuf,
     temp_dir: PathBuf,
+    gpg_home: PathBuf,
 }
 
 impl TestFixture {
@@ -28,10 +29,8 @@ impl TestFixture {
             .as_nanos();
 
         // Create unique temporary directory for this test
-        let temp_dir = std::env::temp_dir().join(format!(
-            "git-sign-verifier-{}-{}-{}",
-            repo_name, branch, timestamp
-        ));
+        // Note: full path length of gpg agent socket must be limited to 108 chars.
+        let temp_dir = std::env::temp_dir().join(format!("gsv-{}", timestamp));
         let repo_path = temp_dir.join(repo_name);
 
         println!("Run test in {}", repo_path.to_str().unwrap());
@@ -43,7 +42,8 @@ impl TestFixture {
         extract_tar_archive(&tar_archive, &temp_dir).expect("Failed to extract repo archive");
 
         // Copy gpg_home to temp directory because gpg home dir is relative to repository
-        copy_directory(&gpg_home, &temp_dir.join("gpg")).expect("Failed to copy gpg_home");
+        let gpg_temp_path = temp_dir.join("gpg");
+        copy_directory(&gpg_home, &gpg_temp_path).expect("Failed to copy gpg_home");
 
         // Checkout the specified branch
         let output = Command::new("git")
@@ -62,7 +62,8 @@ impl TestFixture {
 
         TestFixture {
             repo_path,
-            temp_dir,
+            temp_dir: temp_dir.clone(),
+            gpg_home: gpg_temp_path,
         }
     }
 
@@ -71,13 +72,32 @@ impl TestFixture {
         init_command(self.repo_path.to_str().unwrap(), gpgdir)
     }
 
-    // Verify commits
+    // Verify commits with proper GPG environment
+    // In order to sign tags, gpg agent and context must run
+    // with a GNUPGHOME pointing to our temporary keyring.
     fn verify(&self) -> Result<bool, git2::Error> {
-        verify_command(self.repo_path.to_str().unwrap())
+        let original_gnupg = std::env::var("GNUPGHOME").ok();
+
+        unsafe {
+            std::env::set_var("GNUPGHOME", &self.gpg_home);
+        }
+
+        let result = verify_command(self.repo_path.to_str().unwrap());
+
+        unsafe {
+            match original_gnupg {
+                Some(path) => std::env::set_var("GNUPGHOME", path),
+                None => std::env::remove_var("GNUPGHOME"),
+            }
+        }
+
+        result
     }
 
-    // Clean up temporary files
+    // Clean up temporary files and GPG processes
     fn cleanup(self) {
+        kill_gpg_agent(&self.gpg_home);
+
         let _ = fs::remove_dir_all(self.temp_dir);
     }
 }
@@ -183,7 +203,9 @@ mod tests {
     #[test]
     fn test_init_create_tag() {
         let fixture = TestFixture::with_branch("repo-untagged", "main");
-        fixture.init(None).expect("Initialization process failed");
+        fixture
+            .init(Some(fixture.gpg_home.to_str().unwrap().to_string()))
+            .expect("Initialization process failed");
 
         let repo = git2::Repository::open(&fixture.repo_path).expect("Failed to open repo");
         let result = repo.find_reference("refs/tags/SIGN_VERIFIED");
@@ -198,7 +220,7 @@ mod tests {
     fn test_init_define_gpg_config() {
         let fixture = TestFixture::with_branch("repo-untagged", "main");
         fixture
-            .init(Some("gpgdir".to_string()))
+            .init(Some(fixture.gpg_home.to_str().unwrap().to_string()))
             .expect("Initialization process failed");
 
         let repo = git2::Repository::open(&fixture.repo_path).expect("Failed to open repo");
@@ -211,8 +233,10 @@ mod tests {
             .get_string("git-sign-verifier.gpgmehomedir")
             .expect("Invalid gpg config");
 
+        let expected_path = format!("{}/gpg", fixture.temp_dir.to_str().unwrap());
+
         assert_eq!(
-            config_dir, "gpgdir",
+            config_dir, expected_path,
             "Git config `git-sign-verifier.gpgmehomedir` does not match"
         );
 

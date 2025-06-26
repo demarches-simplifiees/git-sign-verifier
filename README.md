@@ -66,9 +66,11 @@ To accept external contributions, you have to signoff any commit with an authori
 
 ## Tests
 
-Run tests with `cargo test`.
+Run tests with `RUST_TEST_THREADS=1 cargo test`.
 
 Minimal static git repositories are used for testing. At test time they are extracted from a `tar` archive into a temporary directory so that they can be modified without affecting the original repository.
+
+Because of gpg agent which must run with different GPG home across tests, the tests must be executed sequentially with `RUST_TEST_THREADS=1` env variable.
 
 If you need to update the test repositories, uncompress the `tar`, update it and re-tar the repository with `scripts/compress_tests_repos`.
 
