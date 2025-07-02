@@ -1,6 +1,7 @@
 use git2::{Error as GitError, Repository};
 
 pub const TAG_NAME: &str = "SIGN_VERIFIED";
+pub const AUTHORIZED_KEYS_FILE: &str = ".gpg_authorized_keys";
 pub const EXIT_INVALID_SIGNATURE: i32 = 127;
 
 pub struct Config {

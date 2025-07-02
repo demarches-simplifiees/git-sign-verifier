@@ -1,5 +1,5 @@
 use crate::config::Config;
-use gpgme::{Context, Protocol, SignatureSummary, Validity, VerificationResult};
+use gpgme::{Context, Protocol, SignatureSummary, VerificationResult};
 
 // Initialize a GPG verification context
 pub fn create_gpg_context(config: &Config) -> gpgme::Context {
@@ -19,10 +19,10 @@ pub fn create_gpg_context(config: &Config) -> gpgme::Context {
     gpg_ctx
 }
 
-// Verify a message has been signed by a trusted signature.
-// A single valid and trusted signature is enough
-// so we have to ignore errors on any other signature
-// until we eventually find a trusted signature.
+// Verify a message has been signed by a known key.
+// A single valid is enough so
+// we have to ignore errors on any other signature
+// until we eventually find a signature from a known key.
 //
 // See https://github.com/gpg-rs/gpgme/blob/master/examples/verify.rs
 pub fn verify_gpg_signature_result(
@@ -50,17 +50,8 @@ pub fn verify_gpg_signature_result(
             errors.push("Unknown GPG key, missing in keyring");
         }
 
-        if !sig.summary().contains(SignatureSummary::VALID) {
-            errors.push("Invalid signature");
-        }
-
-        match sig.validity() {
-            Validity::Full | Validity::Ultimate | Validity::Marginal => {
-                return Ok(());
-            }
-            _ => {
-                errors.push("GPG key untrusted, should be Full, Ultimate or Marginal.");
-            }
+        if errors.is_empty() {
+            return Ok(());
         }
     }
 

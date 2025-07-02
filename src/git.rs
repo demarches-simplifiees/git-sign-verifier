@@ -25,6 +25,27 @@ pub fn get_last_commit(repo: &Repository) -> Result<Commit, GitError> {
     Ok(commit)
 }
 
+/// Get file content from a specific commit
+pub fn get_file_content_from_commit(
+    repo: &Repository,
+    commit: &Commit,
+    file_path: &str,
+) -> Result<Option<Vec<u8>>, GitError> {
+    let tree = commit.tree()?;
+
+    match tree.get_path(std::path::Path::new(file_path)) {
+        Ok(tree_entry) => {
+            let object = tree_entry.to_object(repo)?;
+            if let Some(blob) = object.as_blob() {
+                Ok(Some(blob.content().to_vec()))
+            } else {
+                Ok(None) // Path exists but is not a file
+            }
+        }
+        Err(_) => Ok(None), // File not found
+    }
+}
+
 // Pretty print a commit
 pub fn print_commit(commit: &Commit) -> () {
     println!("  commit {}", commit.id());

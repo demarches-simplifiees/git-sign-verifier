@@ -20,9 +20,9 @@ git config --local user.email "john.doe@example.com"
 
 ### GPG keyring
 
-The authorized keys are read from the default GPG keyring of the user running the program. Import trusted keys into this keyring with a minimum trust level of `3 (marginal)`.
+Authorized public keys are sourced from the `.gpg_authorized_keys` file within the repository. During execution, these keys are imported into the GPG keyring of the user running the program. This keyring must also contain the secret key used to sign the verification tag. The authorization of keys is based on the contents of this file at the commit referenced by the latest verification tag.
 
-If you want to use a specific gpg keyring for verifications, you can specify it with the `--gpgme-home-dir` option below.
+If you want to use a specific gpg keyring, you can specify it with the `--gpgme-home-dir` option below.
 
 
 ## Actions
@@ -43,9 +43,14 @@ git-sign-verifier init --gpgme-home-dir /path/to/authorized/gpg/keyring # defaul
 
 ### `verify`
 
-Verifies the commits since the latest commit on the `SIGN_VERIFIED` tag. This action will fail if any commit is not signed with an authorized key.
+Verifies the commits since the latest commit on the `SIGN_VERIFIED` tag. Tag and commits since this tag must all be signed with known keys.
 
-Currently, only GPG keys are supported. The authorized keys are read either from the default GPG keyring of the user running the program or from a keyring specified in `init` command. Keys must be trusted, and must not have expired or been revoked.
+Currently, only GPG keys are supported. Authorized public keys for commits are imported from `.gpg_authorized_keys`, read on the tag commit and the are imported either into the default GPG keyring of the user running the program or from a keyring specified in `init` command. Keys must not have expired or been revoked. Trust level is not supported.
+
+This action will fail if :
+- the tag was not signed with a key in the initial keyring
+- any commit since this tag was is not signed with an authorized key present either in keyring or in `.gpg_authorized_keys`
+
 
 
 **Usage:**
@@ -57,12 +62,12 @@ git-sign-verifier verify --directory /path/to/your/repo
 
 ### Merge commits
 
-A merge commit is considered verified when :
-- merge commit itself comes from an authorized key, i.e. when using github, their pubkey must be authorized. This helps to prevent evil merges with from untrusted contributors.
-- all parents commits are signed by an authorized key.
-- all recursive parents are verified until the last SIGN_VERIFIED tag.
+A merge commit is considered verified when all the following conditions are met:
+- The merge commit itself is signed by an authorized key (for example, GitHub's public key must be authorized when using GitHub). This prevents unauthorized merges from untrusted contributors.
+- All parent commits are signed by authorized keys.
+- All recursive parent commits have been verified up to the last `SIGN_VERIFIED` tag.
 
-To accept external contributions, you have to signoff any commit with an authorized key.
+To accept external contributions, every commit must be signed off with an authorized key.
 
 ## Tests
 
@@ -73,6 +78,10 @@ Minimal static git repositories are used for testing. At test time they are extr
 Because of gpg agent which must run with different GPG home across tests, the tests must be executed sequentially with `RUST_TEST_THREADS=1` env variable.
 
 If you need to update the test repositories, uncompress the `tar`, update it and re-tar the repository with `scripts/compress_tests_repos`.
+
+The keyring used for verification and signing the tag is `tests/fixtures/gpg`.
+
+The secret and public keys used for commits in tests repositories are in `tests/fixtures/user-test-example-keys.asc` file.
 
 ## Import GPG keys
 

@@ -1,5 +1,7 @@
-use crate::config::{TAG_NAME, read_or_update_local_config};
-use crate::git::{add_tag, check_tag_exists, open_repo, print_commit};
+use crate::config::{AUTHORIZED_KEYS_FILE, TAG_NAME, read_or_update_local_config};
+use crate::git::{
+    add_tag, check_tag_exists, get_file_content_from_commit, open_repo, print_commit,
+};
 use crate::gpg::{create_gpg_context, verify_gpg_signature_result};
 use git2::{Commit, Error as GitError, ObjectType, Oid, Reference, Repository};
 use gpgme::Context;
@@ -27,6 +29,39 @@ pub fn verify_command(repo_path: &str) -> Result<bool, GitError> {
             )));
         }
     };
+
+    // Get the commit that the tag points to
+    let tag_commit = from_ref.peel_to_commit()?;
+
+    // Read the authorized keys file from that commit
+    let authorized_keys_content =
+        match get_file_content_from_commit(&repo, &tag_commit, AUTHORIZED_KEYS_FILE)? {
+            Some(content) => content,
+            None => {
+                return Err(GitError::from_str(&format!(
+                    "File '{}' not found in commit {}. This commit cannot be verified.",
+                    AUTHORIZED_KEYS_FILE,
+                    tag_commit.id()
+                )));
+            }
+        };
+
+    // Import the authorized keys into the context
+    let _imported = match gpgme::Data::from_bytes(&authorized_keys_content) {
+        Ok(data) => gpg_ctx.import(data).map_err(|e| {
+            return GitError::from_str(&format!(
+                "Failed to import authorized keys into GPG context: {}",
+                e
+            ));
+        }),
+        Err(e) => {
+            return Err(GitError::from_str(&format!(
+                "Failed to create GPG data from authorized keys: {}",
+                e
+            )));
+        }
+    };
+
     let to_ref = repo.head()?;
 
     let all_valid = verify_from_ref(&repo, &from_ref, &to_ref, &mut gpg_ctx)?;

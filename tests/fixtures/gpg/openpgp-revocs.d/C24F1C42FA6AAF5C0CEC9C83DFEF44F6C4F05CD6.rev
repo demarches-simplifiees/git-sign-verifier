@@ -1,0 +1,30 @@
+Ceci est un certificat de révocation pour la clef OpenPGP :
+
+pub   ed25519 2025-07-02 [SC] [expire : 2028-07-01]
+      C24F1C42FA6AAF5C0CEC9C83DFEF44F6C4F05CD6
+uid          CI <test-ci@example.com>
+
+Un certificat de révocation est une sorte de « coupe-circuit » pour déclarer
+publiquement que cette clef ne doit plus être utilisée. Il n'est pas possible
+de se rétracter une fois le certificat de révocation publié.
+
+Utilisez-le pour révoquer cette clef en cas de compromis ou de
+perte de la clef secrète. Cependant, si la clef secrète est
+encore accessible, il est préférable de créer un nouveau
+certificat de révocation afin d’indiquer la cause de révocation.
+Pour les détails, consulter la commande gpg
+« --generate-revocation » du manuel de GnuPG.
+
+Pour éviter une utilisation accidentelle de ce fichier, un
+deux-points a été inséré avant les cinq tirets suivants.
+Supprimez ce deux-points avec un éditeur de texte avant
+d’importer et de publier ce certificat de révocation.
+
+:-----BEGIN PGP PUBLIC KEY BLOCK-----
+Comment: This is a revocation certificate
+
+iHgEIBYKACAWIQTCTxxC+mqvXAzsnIPf70T2xPBc1gUCaGU7kwIdAAAKCRDf70T2
+xPBc1jYmAP9I4591l+ICxtGtEiTjJ4Iz4aLOT9ca9GJfoNebWWm2EwD/Q2k21dMY
+HTi/zGArZTrIUkVMhtZrQcvxzg6vyCJvbgo=
+=7ZNx
+-----END PGP PUBLIC KEY BLOCK-----
