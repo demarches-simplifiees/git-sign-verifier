@@ -83,24 +83,17 @@ The keyring used for verification and signing the tag is `tests/fixtures/gpg`.
 
 The secret and public keys used for commits in tests repositories are in `tests/fixtures/user-test-example-keys.asc` file.
 
-## Import GPG keys
+## Generate GPG authorized keys file
 
-### For a GitHub user
+### Download keys from GitHub users
 
-Import non-expired GPG keys of a GitHub user and sign them locally.
+Generate a `.gpg_authorized_keys` file containing GPG public keys from a list of GitHub users.
 
-```bash
-./scripts/import_gh_user_key <github-username>
-```
-
-###  For a list of GitHub users
-
-Import GPG keys for a list of GitHub users.
-
-List the GitHub usernames to import in an `import_gh_users.txt` file (one username per line)
+List the GitHub usernames in a `gh_users.txt` file (one username per line), then run:
 
 ```bash
-./scripts/import_gh_list_users
+./scripts/download_gh_users_keys
 ```
 
-The public key of GitHub used for merge commits will also be imported.
+This script downloads public keys from `https://github.com/username.gpg` for each user and consolidates them into a single `gpg_authorized_keys` file with comments indicating the source. Move this file to your repository as `.gpg_authorized_keys` to use it for commit signature verification.
+You can include `web-flow` which is the key for GitHub merge commits.

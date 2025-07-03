@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Generate GPG public keys file from a list of GitHub users
+# from a file containing their usernames,
+# and web-flow GitHub public key used for merge commits.
+
+OUTPUT_FILE="gpg_authorized_keys"
+USERNAMES_FILE="gh_users.txt"
+
+# Build complete usernames list
+usernames=()
+
+while IFS= read -r line || [ -n "$line" ]; do
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  usernames+=("$line")
+done < "$USERNAMES_FILE"
+
+# Create output file with header
+cat > "$OUTPUT_FILE" <<EOF
+# GPG Authorized Keys
+# Generated on: $(date)
+# This file contains public GPG keys for signature verification
+
+EOF
+
+# Process each user
+for username in "${usernames[@]}"; do
+    echo "Processing: $username"
+
+    temp_key=$(mktemp)
+    gpg_url="https://github.com/${username}.gpg"
+
+    # Download and add to file if valid
+    if curl -sSL "$gpg_url" > "$temp_key" && grep -q "BEGIN PGP PUBLIC KEY BLOCK" "$temp_key"; then
+        cat >> "$OUTPUT_FILE" <<EOF
+
+# GPG Keys from GitHub user: $username
+# Source: $gpg_url
+EOF
+        cat "$temp_key" >> "$OUTPUT_FILE"
+        echo "" >> "$OUTPUT_FILE"
+    else
+        echo "  ✗ No valid keys for $username"
+    fi
+
+    rm -f "$temp_key"
+done
+
+echo ""
+echo "Total keys downloaded: $(grep -c "BEGIN PGP PUBLIC KEY BLOCK" "$OUTPUT_FILE")"
+echo ""
+echo "Move the file to your repository: "
+echo "mv $OUTPUT_FILE /path/to/repo/.gpg_authorized_keys"

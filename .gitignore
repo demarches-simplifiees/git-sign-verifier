@@ -4,4 +4,5 @@
 /tests/fixtures/repo-untagged
 /tests/fixtures/repo-tag-unknown-signature
 
-/import_gh_users.txt
+/gh_users.txt
+/gpg_authorized_keys
