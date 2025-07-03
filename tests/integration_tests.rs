@@ -266,4 +266,20 @@ mod tests {
 
         fixture.cleanup();
     }
+
+    // Init fails when authorized keys file is missing
+    #[test]
+    fn test_init_require_authorized_keys() {
+        let fixture = TestFixture::with_branch("repo-untagged", "without-authorized-keys");
+        let result = fixture
+            .init(Some(fixture.gpg_home.to_str().unwrap().to_string()))
+            .is_ok();
+
+        assert!(
+            !result,
+            "Initialization should fail when there are no .gpg_authorized_keys"
+        );
+
+        fixture.cleanup();
+    }
 }

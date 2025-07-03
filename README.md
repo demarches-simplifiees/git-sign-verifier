@@ -33,6 +33,8 @@ Initializes the repository for commit signature verification. This action sets u
 
 If you want to use a specific gpg keyring for verifications, you can specify it with the `--gpgme-home-dir` option.
 
+Note that the `.gpg_authorized_keys` file must exist in the repository at the time of initialization.
+
 **Usage:**
 
 ```bash
